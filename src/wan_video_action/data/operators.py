@@ -17,8 +17,18 @@ import torch
 import torchvision
 from PIL import Image
 
-from diffsynth.core.data.operators import DataProcessingOperator, ToAbsolutePath, FrameSamplerByRateMixin
-
+from diffsynth.core.data.operators import (
+    DataProcessingOperator,
+    FrameSamplerByRateMixin,
+    RouteByExtensionName,
+    LoadImage,
+    LoadVideo,
+    RouteByType,
+    ToAbsolutePath,
+    SequencialProcess,
+    ToList,
+    LoadGIF,
+)
 
 """
 Class: DataProcessingOperator
@@ -30,35 +40,37 @@ This implementation facilitates intuitive pipeline composition, allowing multipl
 data processing operators to be chained together sequentially 
 (e.g., `operator_A >> operator_B`).
 """
-class ApplyOperatorToDict(DataProcessingOperator):
+class RouteByKeyExtension(DataProcessingOperator):
     """
     Applies a given operator to a specific key in a dictionary.
 
     Args:
-        key: The dictionary key whose value will be processed.
-        operator: The DataProcessingOperator to apply to the value.
-        inplace: If True, modifies the input dictionary directly. 
-                 If False, creates a shallow copy. Default is False.
+        key: The dictionary key containing the file path to route.
+        operator_map: List of (extensions, operator) tuples for routing by file extension.
     """
-    def __init__(self, key: str, operator: DataProcessingOperator, inplace: bool = False):
+    def __init__(self, key: str, operator_map=None):
         self.key = key
-        self.operator = operator
-        self.inplace = inplace
-
-    def __call__(self, data: dict):
-        if not isinstance(data, dict):
-            raise TypeError(f"ApplyToKey expects a dictionary, got {type(data).__name__}.")
+        self.operator_map = operator_map or []
         
-        if self.key not in data:
-            raise KeyError(f"Key '{self.key}' not found in the input dictionary.")
-
-        if self.inplace:
-            data[self.key] = self.operator(data[self.key])
-            return data
-        else:
-            updated_data = data.copy()
-            updated_data[self.key] = self.operator(data[self.key])
-            return updated_data
+    def __call__(self, data):
+        path = data.get(self.key, "") if isinstance(data, dict) else data
+        ext = path.split('.')[-1].lower()
+        
+        for exts, operator in self.operator_map:
+            if ext in exts:
+                return operator(data) # 传递完整上下文
+                
+        raise ValueError(f"Unsupported extension: {ext} for data {data}")
+    
+    
+class ToAbsolutePathByKeyExtension(DataProcessingOperator):
+    def __init__(self, base_path="", key=""):
+        self.base_path = base_path
+        self.key = key
+        
+    def __call__(self, data):
+        path = data.get(self.key, "") if isinstance(data, dict) else data
+        return os.path.join(self.base_path, path)
 
 
 class ResolvePromptEmbPath(DataProcessingOperator):
@@ -72,13 +84,24 @@ class ResolvePromptEmbPath(DataProcessingOperator):
 
 
 class LoadVideoChunk(DataProcessingOperator, FrameSamplerByRateMixin):
-    def __init__(self, num_frames=81, time_division_factor=4, time_division_remainder=1, frame_processor=lambda x: x, frame_rate=24, fix_frame_rate=False):
+    def __init__(self, base_path="", num_frames=81, time_division_factor=4, time_division_remainder=1, frame_processor=lambda x: x, frame_rate=24, fix_frame_rate=False):
         FrameSamplerByRateMixin.__init__(self, num_frames, time_division_factor, time_division_remainder, frame_rate, fix_frame_rate)
+        self.base_path = base_path
         # frame_processor is build in the video loader for high efficiency.
         self.frame_processor = frame_processor
 
-    def __call__(self, data: str, start_frame=None, end_frame=None):
-        reader = self.get_reader(data)
+    def __call__(self, data, start_frame=None, end_frame=None):
+        if isinstance(data, dict):
+            path = data.get("data")
+            start_frame = start_frame if start_frame is not None else data.get("start_frame")
+            end_frame = end_frame if end_frame is not None else data.get("end_frame")
+        else:
+            raise TypeError(f"Expected 'data' to be a dict, but received {type(data).__name__}.")
+            
+        if not os.path.isabs(path):
+            path = os.path.join(self.base_path, path)
+            
+        reader = self.get_reader(path)
         raw_frame_rate = reader.get_meta_data()['fps']
         total_raw_frames = reader.count_frames()
         
@@ -106,7 +129,8 @@ class LoadVideoChunk(DataProcessingOperator, FrameSamplerByRateMixin):
     
 
 class LoadGIFChunk(DataProcessingOperator):
-    def __init__(self, num_frames=81, time_division_factor=4, time_division_remainder=1, frame_processor=lambda x: x):
+    def __init__(self, base_path="", num_frames=81, time_division_factor=4, time_division_remainder=1, frame_processor=lambda x: x):
+        self.base_path = base_path
         self.num_frames = num_frames
         self.time_division_factor = time_division_factor
         self.time_division_remainder = time_division_remainder
@@ -121,8 +145,18 @@ class LoadGIFChunk(DataProcessingOperator):
                 num_frames -= 1
         return num_frames
         
-    def __call__(self, data: str, start_frame=None, end_frame=None):
-        images = iio.imread(data, mode="RGB")
+    def __call__(self, data, start_frame=None, end_frame=None):
+        if isinstance(data, dict):
+            path = data.get("data")
+            start_frame = start_frame if start_frame is not None else data.get("start_frame")
+            end_frame = end_frame if end_frame is not None else data.get("end_frame")
+        else:
+            raise TypeError(f"Expected 'data' to be a dict, but received {type(data).__name__}.")
+            
+        if not os.path.isabs(path):
+            path = os.path.join(self.base_path, path)
+            
+        images = iio.imread(path, mode="RGB")
         total_raw_frames = len(images)
         
         start = max(0, start_frame if start_frame is not None else 0)
@@ -443,3 +477,43 @@ class LoadCobotAction(DataProcessingOperator):
         return arr[None, ...]
 
 
+def create_video_operator(base_path, height, width, max_pixels, num_frames,
+                          height_division_factor, width_division_factor,
+                          time_division_factor, time_division_remainder, resize_mode="fit", default_key="data"):
+    """Create video operator that supports multi-view videos (list of paths).
+
+    This replicates lzr's default_video_operator behavior with multi-view support.
+
+    Args:
+        base_path: Base directory for resolving relative paths
+        height: Target height (None for dynamic)
+        width: Target width (None for dynamic)
+        max_pixels: Maximum pixels for dynamic resolution
+        num_frames: Number of frames to load
+        height_division_factor: Height must be divisible by this
+        width_division_factor: Width must be divisible by this
+        time_division_factor: Frame count must be divisible by this
+        time_division_remainder: Frame count remainder requirement
+        resize_mode: "fit" or "crop" resize behavior
+
+    Returns:
+        DataProcessingOperator that loads and processes video data
+    """
+    image_processor = ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor, resize_mode=resize_mode)
+    
+    image_pipeline = ToAbsolutePathByKeyExtension(base_path) >> LoadImage() >> image_processor >> ToList()
+    
+    gif_pipeline = LoadGIFChunk(base_path=base_path, num_frames=num_frames, time_division_factor=time_division_factor, time_division_remainder=time_division_remainder, frame_processor=image_processor)
+    video_pipeline = LoadVideoChunk(base_path=base_path, num_frames=num_frames, time_division_factor=time_division_factor, time_division_remainder=time_division_remainder, frame_processor=image_processor)
+    
+    video_operator = RouteByKeyExtension(key=default_key, operator_map=[
+        (("jpg", "jpeg", "png", "webp"), image_pipeline),
+        (("gif",), gif_pipeline),
+        (("mp4", "avi", "mov", "wmv", "mkv", "flv", "webm"), video_pipeline),
+    ])
+    # Support dict (with metadata), str (single path), and list (multi-view)
+    return RouteByType(operator_map=[
+        (dict, video_operator),
+        (str, video_operator),
+        (list, SequencialProcess(video_operator)),
+    ]) >> ToVideoTensor()
