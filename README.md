@@ -27,19 +27,19 @@
 <table align="center">
   <tr>
     <td align="center">
-      <img src="assets/images/track-1-open-source.png" alt="Track 1 open-source leaderboard" width="420"><br>
+      <img src="assets/images/track-1-open-source.png" alt="Track 1 open-source leaderboard" width="800"><br>
       <sub>Track 1 open-source leaderboard</sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="assets/images/track-2-DE-open-source.png" alt="Track 2 Data Engine open-source leaderboard" width="420"><br>
+      <img src="assets/images/track-2-DE-open-source.png" alt="Track 2 Data Engine open-source leaderboard" width="800"><br>
       <sub>Track 2 Data Engine open-source leaderboard</sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="assets/images/track-1-total.png" alt="Track 1 overall leaderboard" width="420"><br>
+      <img src="assets/images/track-1-total.png" alt="Track 1 overall leaderboard" width="800"><br>
       <sub>Track 1 overall leaderboard</sub>
     </td>
   </tr>
