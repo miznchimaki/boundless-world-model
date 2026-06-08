@@ -416,10 +416,10 @@ class LoadCobotAction(DataProcessingOperator):
                 end_frame = data.get("end_frame")
         else:
             parquet_rel = data
-        
+
         if not parquet_rel:
             raise KeyError("Missing parquet path in metadata 'data' field.")
-        
+
         parquet_path = resolve_path(self.base_path, parquet_rel)
 
         start_frame = int(start_frame)
