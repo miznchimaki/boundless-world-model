@@ -69,8 +69,24 @@ class ResolvePromptEmbPath(DataProcessingOperator):
 
 
 class LoadVideoChunk(DataProcessingOperator, FrameSamplerByRateMixin):
-    def __init__(self, base_path="", num_frames=81, time_division_factor=4, time_division_remainder=1, frame_processor=lambda x: x, frame_rate=24, fix_frame_rate=False):
-        FrameSamplerByRateMixin.__init__(self, num_frames, time_division_factor, time_division_remainder, frame_rate, fix_frame_rate)
+    def __init__(
+        self,
+        base_path="",
+        num_frames=81,
+        time_division_factor=4,
+        time_division_remainder=1,
+        frame_processor=lambda x: x,
+        frame_rate=24,
+        fix_frame_rate=False
+    ):
+        FrameSamplerByRateMixin.__init__(
+            self,
+            num_frames,
+            time_division_factor,
+            time_division_remainder,
+            frame_rate,
+            fix_frame_rate
+        )
         self.base_path = base_path
         # frame_processor is build in the video loader for high efficiency.
         self.frame_processor = frame_processor
@@ -82,13 +98,13 @@ class LoadVideoChunk(DataProcessingOperator, FrameSamplerByRateMixin):
             end_frame = end_frame if end_frame is not None else data.get("end_frame")
         else:
             raise TypeError(f"Expected 'data' to be a dict, but received {type(data).__name__}.")
-            
+
         path = resolve_path(self.base_path, path)
-            
+
         reader = self.get_reader(path)
         raw_frame_rate = reader.get_meta_data()['fps']
         total_raw_frames = reader.count_frames()
-        
+
         start = max(0, start_frame if start_frame is not None else 0)
         end = min(total_raw_frames, end_frame if end_frame is not None else total_raw_frames)
         clip_frames = max(0, end - start)
@@ -102,7 +118,7 @@ class LoadVideoChunk(DataProcessingOperator, FrameSamplerByRateMixin):
                 time_division_factor=self.time_division_factor,
                 time_division_remainder=self.time_division_remainder,
             )
-        
+
         frames = []
         for frame_id in range(num_frames):
             frame_id = self.map_single_frame_id(frame_id, raw_frame_rate, clip_frames)
@@ -115,7 +131,14 @@ class LoadVideoChunk(DataProcessingOperator, FrameSamplerByRateMixin):
     
 
 class LoadGIFChunk(DataProcessingOperator):
-    def __init__(self, base_path="", num_frames=81, time_division_factor=4, time_division_remainder=1, frame_processor=lambda x: x):
+    def __init__(
+        self,
+        base_path="",
+        num_frames=81,
+        time_division_factor=4,
+        time_division_remainder=1,
+        frame_processor=lambda x: x
+    ):
         self.base_path = base_path
         self.num_frames = num_frames
         self.time_division_factor = time_division_factor
@@ -140,12 +163,12 @@ class LoadGIFChunk(DataProcessingOperator):
             end_frame = end_frame if end_frame is not None else data.get("end_frame")
         else:
             raise TypeError(f"Expected 'data' to be a dict, but received {type(data).__name__}.")
-            
+
         path = resolve_path(self.base_path, path)
-            
+
         images = iio.imread(path, mode="RGB")
         total_raw_frames = len(images)
-        
+
         start = max(0, start_frame if start_frame is not None else 0)
         end = min(total_raw_frames, end_frame if end_frame is not None else total_raw_frames)
         clip_frames = max(0, end - start)
@@ -160,7 +183,15 @@ class LoadGIFChunk(DataProcessingOperator):
 
 
 class ImageCropAndResize(DataProcessingOperator):
-    def __init__(self, height=None, width=None, max_pixels=None, height_division_factor=1, width_division_factor=1, resize_mode: str = "fit"):
+    def __init__(
+        self,
+        height=None,
+        width=None,
+        max_pixels=None,
+        height_division_factor=1,
+        width_division_factor=1,
+        resize_mode: str = "fit"
+    ):
         self.height = height
         self.width = width
         self.max_pixels = max_pixels
@@ -416,10 +447,10 @@ class LoadCobotAction(DataProcessingOperator):
                 end_frame = data.get("end_frame")
         else:
             parquet_rel = data
-        
+
         if not parquet_rel:
             raise KeyError("Missing parquet path in metadata 'data' field.")
-        
+
         parquet_path = resolve_path(self.base_path, parquet_rel)
 
         start_frame = int(start_frame)
@@ -500,13 +531,32 @@ def create_video_operator(
     num_frames=81, time_division_factor=4, time_division_remainder=1,
     resize_mode="fit", default_key="data"
 ):
-    image_processor = ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor, resize_mode=resize_mode)
-    
+    image_processor = ImageCropAndResize(
+        height,
+        width,
+        max_pixels,
+        height_division_factor,
+        width_division_factor,
+        resize_mode=resize_mode
+    )
+
     image_pipeline = ToAbsolutePathByKeyExtension(base_path) >> LoadImage() >> image_processor >> ToList()
-    
-    gif_pipeline = LoadGIFChunk(base_path=base_path, num_frames=num_frames, time_division_factor=time_division_factor, time_division_remainder=time_division_remainder, frame_processor=image_processor)
-    video_pipeline = LoadVideoChunk(base_path=base_path, num_frames=num_frames, time_division_factor=time_division_factor, time_division_remainder=time_division_remainder, frame_processor=image_processor)
-    
+
+    gif_pipeline = LoadGIFChunk(
+        base_path=base_path,
+        num_frames=num_frames,
+        time_division_factor=time_division_factor,
+        time_division_remainder=time_division_remainder,
+        frame_processor=image_processor
+    )
+    video_pipeline = LoadVideoChunk(
+        base_path=base_path,
+        num_frames=num_frames,
+        time_division_factor=time_division_factor,
+        time_division_remainder=time_division_remainder,
+        frame_processor=image_processor
+    )
+
     video_operator = RouteByKeyExtension(key=default_key, operator_map=[
         (("jpg", "jpeg", "png", "webp"), image_pipeline),
         (("gif",), gif_pipeline),
