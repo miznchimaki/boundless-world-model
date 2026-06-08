@@ -400,8 +400,16 @@ def model_fn_wan_video_action(
         spatial_token_count = latents.shape[3] * latents.shape[4] // 4
         t = torch.concat(
             [
-                torch.zeros((condition_t, spatial_token_count), dtype=latents.dtype, device=latents.device),
-                torch.ones((latents.shape[2] - condition_t, spatial_token_count), dtype=latents.dtype, device=latents.device) * timestep,
+                torch.zeros(
+                    (condition_t, spatial_token_count),
+                    dtype=latents.dtype,
+                    device=latents.device
+                ),
+                torch.ones(
+                    (latents.shape[2] - condition_t, spatial_token_count),
+                    dtype=latents.dtype,
+                    device=latents.device
+                ) * timestep,
             ]
         ).flatten()
         t = dit.time_embedding(sinusoidal_embedding_1d(dit.freq_dim, t).unsqueeze(0))
