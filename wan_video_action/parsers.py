@@ -110,7 +110,18 @@ def add_model_config(parser: argparse.ArgumentParser):
 
 def add_action_config(parser: argparse.ArgumentParser):
     group = parser.add_argument_group("action")
-    group.add_argument("--action_type", type=str, choices=["joint_abs", "eef_abs", "joint_delta", "eef_delta"], default="eef_delta", help='[KEY] Action/state representation: joint/eef × abs/delta. (choices: "joint_abs", "eef_abs", "joint_delta", "eef_delta")')
+    group.add_argument(
+        "--action_type",
+        type=str,
+        choices=[
+            "joint_abs",
+            "eef_abs",
+            "joint_delta",
+            "eef_delta"
+        ],
+        default="eef_delta",
+        help='[KEY] Action/state representation: joint/eef × abs/delta. (choices: "joint_abs", "eef_abs", "joint_delta", "eef_delta")'
+    )
     group.add_argument("--action_stat_path", type=str, default=None, help="[OPTIONAL] Path to robot normalization stats (stat.json).")
     group.add_argument("--action_dim", type=int, default=14, help="[OPTIONAL] Action dimension.")
     return parser
